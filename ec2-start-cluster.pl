@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+
 use strict;
 
 =comment
@@ -32,6 +33,8 @@ input the ID's and friendly names of your instances into the %instances hash bel
 It's a time-saver to use ssh-copy-id onto the instances.
 
 todo:
+add host names to new servers
+clear up known_hosts on puppetmaster
 adjust the username for redhat, ubuntu, amazon
 check for the absence of required files
 re-write in puppet
@@ -44,39 +47,108 @@ perhaps use an external config file
 #Configuration
 #===============================================
 
-#you must set these:
-my %instances = ( "i-3b49f85d" => [ "master", "" , "" ],
-		  "i-8b49f8ed" => [ "slave", "" , "" ],
-		  "i-4f67ec29" => [ "secondary", "" , "" ]
-	);	
+my %instances = (
+		"i-3a0b3242" => { "name" => "puppetserver",
+                                        "login" => "root",
+                                        "publicip" => "",
+                                        "privateip" => "",
+                                        "alias" => "puppet" ,
+                                        },
+		"i-13403b68" => { "name" => "nagios8",
+                                        "login" => "root",
+                                        "publicip" => "",
+                                        "privateip" => "",
+                                        "alias" => "" ,
+                                        },
+		"i-03fa8178" => { "name" => "nagios9",
+                                        "login" => "root",
+                                        "publicip" => "",
+                                        "privateip" => "",
+                                        "alias" => "" ,
+                                        },
+		);
+=comment
+my %instanceshadoop = ( "i-fa0c7283" => [ "master", "" , "" ],
+                  "i-e80d7391" => [ "slave", "" , "" ],
+                  "i-ea0d7393" => [ "secondary", "" , "" ]
+        );
+
+my %instancesmongo = ( "i-2e307657" => [ "mongo1", "" , "" ],
+                  "i-20307659" => [ "mongo2", "" , "" ],
+                  "i-2230765b" => [ "mongo3", "" , "" ]
+        );
+=cut
 
 #you might like to set these in this file, if using cron where the environment is missing.
-#export EC2_PRIVATE_KEY=/root/pk-.....pem
-#export EC2_CERT=/root/cert-......pem
-#export JAVA_HOME=/usr/java/default
-#export EC2_HOME=/usr/downloads/ec2-api-tools-1.5.3.1
+$ENV{EC2_PRIVATE_KEY}="/root/pk-E7QQZXPQWOAYNED2HE7T3Y5ZJTKLFOVW.pem";
+$ENV{EC2_CERT}="/root/cert-E7QQZXPQWOAYNED2HE7T3Y5ZJTKLFOVW.pem";
+$ENV{JAVA_HOME}="/usr/java/default";
+$ENV{EC2_HOME}="/usr/downloads/ec2-api-tools-1.5.3.1";
 
 #===============================================
 #The Code
 #===============================================
 
-my $startmachines = 1;
-my $copyhostsfile = 1;
+my $arg0=$ARGV[0];
+my $arg1=$ARGV[1];
+my $arg2=$ARGV[2];
+
+#print "$arg0 w $arg1 w $arg2\n";
+
+=comment
+my %instances;
+
+if ($arg1 eq "mongo") {
+	print "using mongo\n";
+	%instances = %instancesmongo;
+	}
+
+else {
+	print "using hadoop\n";
+	%instances = %instanceshadoop;
+	}
+=cut
 
 my $ec2_home = $ENV{'EC2_HOME'};
+
+if ($arg0 eq "stop") {
+
+	my $COMMAND="ec2-stop-instances";
+	my $CPATH="$ec2_home/bin";
+
+        print "Stopping Instances\n";
+
+        my $instance;
+
+	print "here and".%instances."\n";
+        foreach $instance (keys %instances) {
+		print "here2\n";
+                my $x = `$CPATH/$COMMAND $instance`;
+                print $x;
+        	}
+	} #end of stop
+
+else { #start instances
+
+`sed -i -e 's/master*//' /root/.ssh/known_hosts`;
+`sed -i -e 's/secondary*//' /root/.ssh/known_hosts`;
+`sed -i -e 's/slave*//' /root/.ssh/known_hosts`;
+
+my $debuggingstartmachines = 1;
+my $copyhostsfile = 1;
 
 my $COMMAND="ec2-start-instances";
 my $CPATH="$ec2_home/bin";
 
-if ($startmachines) {
+if ($debuggingstartmachines) {
 
-print "Starting Instances\n";
+	print "Starting Instances\n";
 
-my $instance;
-foreach $instance (keys %instances) {
-        my $x = `$CPATH/$COMMAND $instance`;
-	print $x;
-}
+	my $instance;
+	foreach $instance (keys %instances) {
+        	my $x = `$CPATH/$COMMAND $instance`;
+		print $x;
+	}
 }
 
 print "Collecting IPs\n";
@@ -84,9 +156,9 @@ print "Collecting IPs\n";
 my $instance;
 foreach $instance (keys %instances) {
         my $id = $instance;
-        my $name = $instances{$id}[0];
-        my $publicip = $instances{$id}[1];
-        my $privateip = $instances{$id}[2];
+        my $name = $instances{$id}{"name"};
+        my $publicip = $instances{$id}{"publicip"};
+        my $privateip = $instances{$id}{"privateip"};
 
 	print "id $id name $name\n";
 
@@ -97,7 +169,7 @@ foreach $instance (keys %instances) {
 	print "\n";
 	print "public ip is $1\n";
 	#assign the ip to the array
-	$instances{"$id"}[1]=$1;
+	$instances{"$id"}{"publicip"}=$1;
 
 	#"x" =~ /(x)/;
 
@@ -106,37 +178,9 @@ foreach $instance (keys %instances) {
         print "private ip is $1\n";
 	print "\n";
         #assign the ip to the array
-        $instances{"$id"}[2]=$1;
+        $instances{"$id"}{"privateip"}=$1;
 
 	}
-
-print "Creating hosts file\n";
-
-open FILE, ">hosts" or die $!;
-
-print FILE "127.0.0.1   localhost localhost.localdomain\n";
-
-foreach $instance (keys %instances) {
-        my $id = $instance;
-        my $name = $instances{$id}[0];
-        my $publicip = $instances{$id}[1];
-        my $privateip = $instances{$id}[2];
-	print FILE "$privateip $name\n";
-	}
-
-close FILE;
-
-if ($copyhostsfile) {
-print "Copying hosts file to instances\n";
-foreach $instance (keys %instances) {
-        my $id = $instance;
-        my $name = $instances{$id}[0];
-        my $publicip = $instances{$id}[1];
-        my $privateip = $instances{$id}[2];
-
-	`scp hosts $publicip:/etc/`;
-	}
-}
 
 #Fix local hosts file, here on 'puppetmaster'.
 
@@ -146,18 +190,23 @@ my $x;
 my $y=1;
 foreach $instance (keys %instances) {
         my $id = $instance;
-        my $name = $instances{$id}[0];
-        my $publicip = $instances{$id}[1];
-        my $privateip = $instances{$id}[2];
-	if ($name && $name ne "localhost") {
-		$x = "rm /files/etc/hosts/*[canonical = '$name']";
-		print "x is $x\n";
-		print FILE "$x\n"; 
-		print FILE "set /files/etc/hosts/0$y/ipaddr $publicip\n";
-		print FILE "set /files/etc/hosts/0$y/canonical $name\n";
-		$y++;
-		}
-	}
+        my $name = $instances{$id}{"name"};
+        my $publicip = $instances{$id}{"publicip"};
+        my $privateip = $instances{$id}{"privateip"};
+        my $alias = $instances{$id}{"alias"};
+        my $login = $instances{$id}{"login"};
+
+if ($name && $name ne "localhost") {
+                $x = "rm /files/etc/hosts/*[canonical = '$name']";
+                #print "x is $x\n";
+                print FILE "$x\n";
+                print FILE "set /files/etc/hosts/0$y/ipaddr $publicip\n";
+                print FILE "set /files/etc/hosts/0$y/canonical $name\n";
+                print FILE "set /files/etc/hosts/0$y/alias $name.ec2.internal\n";
+                print FILE "set /files/etc/hosts/0$y/alias[2] $alias\n";
+                $y++;
+                }
+        }
 
 print FILE "save\n";
 
@@ -165,4 +214,42 @@ print FILE "save\n";
 
 close FILE;
 
+print "Creating hosts file\n";
+
+open FILE, ">hosts" or die $!;
+
+print FILE "127.0.0.1   localhost localhost.localdomain\n";
+
+foreach $instance (keys %instances) {
+        my $id = $instance;
+        my $name = $instances{$id}{"name"};
+        my $publicip = $instances{$id}{"publicip"};
+        my $privateip = $instances{$id}{"privateip"};
+        my $alias = $instances{$id}{"alias"};
+        my $login = $instances{$id}{"login"};
+	print FILE "$privateip $name $name.ec2.internal $alias\n";
+	}
+
+close FILE;
+
+my $sleep=1;
+print "sleeping $sleep seconds while hosts start up\n";
+sleep $sleep;
+
+if ($copyhostsfile) {
+print "Copying hosts file to instances\n";
+foreach $instance (keys %instances) {
+        my $id = $instance;
+        my $name = $instances{$id}{"name"};
+        my $publicip = $instances{$id}{"publicip"};
+        my $privateip = $instances{$id}{"privateip"};
+        my $alias = $instances{$id}{"alias"};
+        my $login = $instances{$id}{"login"};
+	my $connecthost = $login.'@'.$name ;
+	print "connecthost is $connecthost\n";
+	`scp -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no hosts $connecthost:/etc/`;
+	}
+}
+
+} #end of "else" for starting instances
 
