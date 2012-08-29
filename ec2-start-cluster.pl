@@ -13,7 +13,7 @@ Instructions and comments:
 ec2-start-cluster.pl version 0.1
 
 by Sam Darwin
-2012-05-18
+started 2012-05-18
 
 This script will automatically start a few EC2 instances, and put a hosts file onto all of them.
 Good for a small test environment which can be shut down and turned on repeatedly.
@@ -31,21 +31,23 @@ export EC2_HOME=/usr/downloads/ec2-api-tools-1.5.3.1
 
 create external json file with this format:
 {
-                "i-b9393ec2" : { "name" : "chef-server",
-                                        "login" : "root",
-                                        "publicip" : "",
-                                        "privateip" : "",
-                                        "alias" : "" ,
-                                        "osfamily" : "redhat"
-                                        },
-                "i-1dc4c366" : { "name" : "chef-client1",
-                                        "login" : "root",
-                                        "publicip" : "",
-                                        "privateip" : "",
-                                        "alias" : "" ,
-                                        "osfamily" : "redhat"
-                                        }
+                "i-b93ec2" : { "name" : "chef-server",
+                                 "login" : "root",
+                                 "publicip" : "",
+                                 "privateip" : "",
+                                 "alias" : "" ,
+                                 "osfamily" : "redhat"
+                                  },
+                "i-1dc366" : { "name" : "chef-client1",
+                                 "login" : "root",
+                                 "publicip" : "",
+                                 "privateip" : "",
+                                 "alias" : "" ,
+                                 "osfamily" : "redhat"
+                                  }
 }
+
+Run this program with no parameters, to see the "usage".
 
 todo:
 ?clear up known_hosts on puppetmaster
@@ -73,6 +75,11 @@ $ENV{EC2_HOME}="/usr/downloads/ec2-api-tools-1.5.3.1";
 my $arg0=$ARGV[0];
 my $arg1=$ARGV[1];
 my $arg2=$ARGV[2];
+
+if (!$arg0) {
+	print "Usage: ./ec2-start-cluster.pl json-config-file [start|stop]\n";
+	exit;
+	}
 
 my $json;
 open FILE, $arg0 or die "Couldn't open file: $!"; 
