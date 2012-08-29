@@ -36,18 +36,19 @@ create external json file with this format:
                                         "publicip" : "",
                                         "privateip" : "",
                                         "alias" : "" ,
-                                        "os" : "redhat"
+                                        "osfamily" : "redhat"
                                         },
                 "i-1dc4c366" : { "name" : "chef-client1",
                                         "login" : "root",
                                         "publicip" : "",
                                         "privateip" : "",
                                         "alias" : "" ,
-                                        "os" : "redhat"
-                                        },
+                                        "osfamily" : "redhat"
+                                        }
+}
 
 todo:
-clear up known_hosts on puppetmaster
+?clear up known_hosts on puppetmaster
 ?check for the absence of required files
 re-write in chef
 use augeas on end-nodes
