@@ -1,6 +1,8 @@
 #!/usr/bin/perl
 
 use strict;
+use JSON::Parse 'json_to_perl';
+use Data::Dump  qw(dump);
 
 =comment
 
@@ -14,8 +16,7 @@ by Sam Darwin
 2012-05-18
 
 This script will automatically start a few EC2 instances, and put a hosts file onto all of them.
-The way, they can all see each other by "name".   Good for a small test environment
-which can be shut down and turned on repeatedly.
+Good for a small test environment which can be shut down and turned on repeatedly.
 
 Pre-requisites:
 
@@ -28,56 +29,35 @@ export EC2_CERT=/root/cert-......pem
 export JAVA_HOME=/usr/java/default
 export EC2_HOME=/usr/downloads/ec2-api-tools-1.5.3.1
 
-input the ID's and friendly names of your instances into the %instances hash below:
-
-It's a time-saver to use ssh-copy-id onto the instances.
+create external json file with this format:
+{
+                "i-b9393ec2" : { "name" : "chef-server",
+                                        "login" : "root",
+                                        "publicip" : "",
+                                        "privateip" : "",
+                                        "alias" : "" ,
+                                        "os" : "redhat"
+                                        },
+                "i-1dc4c366" : { "name" : "chef-client1",
+                                        "login" : "root",
+                                        "publicip" : "",
+                                        "privateip" : "",
+                                        "alias" : "" ,
+                                        "os" : "redhat"
+                                        },
 
 todo:
-add host names to new servers
 clear up known_hosts on puppetmaster
-adjust the username for redhat, ubuntu, amazon
-check for the absence of required files
-re-write in puppet
+?check for the absence of required files
+re-write in chef
 use augeas on end-nodes
-add stop functionality into this script
-perhaps use an external config file
+
 =cut
 
 #===============================================
 #Configuration
 #===============================================
 
-my %instances = (
-		"i-3a0b3242" => { "name" => "puppetserver",
-                                        "login" => "root",
-                                        "publicip" => "",
-                                        "privateip" => "",
-                                        "alias" => "puppet" ,
-                                        },
-		"i-13403b68" => { "name" => "nagios8",
-                                        "login" => "root",
-                                        "publicip" => "",
-                                        "privateip" => "",
-                                        "alias" => "" ,
-                                        },
-		"i-03fa8178" => { "name" => "nagios9",
-                                        "login" => "root",
-                                        "publicip" => "",
-                                        "privateip" => "",
-                                        "alias" => "" ,
-                                        },
-		);
-=comment
-my %instanceshadoop = ( "i-fa0c7283" => [ "master", "" , "" ],
-                  "i-e80d7391" => [ "slave", "" , "" ],
-                  "i-ea0d7393" => [ "secondary", "" , "" ]
-        );
-
-my %instancesmongo = ( "i-2e307657" => [ "mongo1", "" , "" ],
-                  "i-20307659" => [ "mongo2", "" , "" ],
-                  "i-2230765b" => [ "mongo3", "" , "" ]
-        );
-=cut
 
 #you might like to set these in this file, if using cron where the environment is missing.
 $ENV{EC2_PRIVATE_KEY}="/root/pk-E7QQZXPQWOAYNED2HE7T3Y5ZJTKLFOVW.pem";
@@ -93,25 +73,18 @@ my $arg0=$ARGV[0];
 my $arg1=$ARGV[1];
 my $arg2=$ARGV[2];
 
-#print "$arg0 w $arg1 w $arg2\n";
+my $json;
+open FILE, $arg0 or die "Couldn't open file: $!"; 
+while (<FILE>){
+ $json .= $_;
+}
+close FILE;
 
-=comment
-my %instances;
-
-if ($arg1 eq "mongo") {
-	print "using mongo\n";
-	%instances = %instancesmongo;
-	}
-
-else {
-	print "using hadoop\n";
-	%instances = %instanceshadoop;
-	}
-=cut
+my $instances = json_to_perl ($json);
 
 my $ec2_home = $ENV{'EC2_HOME'};
 
-if ($arg0 eq "stop") {
+if ($arg1 eq "stop") {
 
 	my $COMMAND="ec2-stop-instances";
 	my $CPATH="$ec2_home/bin";
@@ -120,8 +93,8 @@ if ($arg0 eq "stop") {
 
         my $instance;
 
-	print "here and".%instances."\n";
-        foreach $instance (keys %instances) {
+	#print "here\n";
+        foreach $instance (keys %{$instances}) {
 		print "here2\n";
                 my $x = `$CPATH/$COMMAND $instance`;
                 print $x;
@@ -145,7 +118,7 @@ if ($debuggingstartmachines) {
 	print "Starting Instances\n";
 
 	my $instance;
-	foreach $instance (keys %instances) {
+	foreach $instance (keys %{$instances}) {
         	my $x = `$CPATH/$COMMAND $instance`;
 		print $x;
 	}
@@ -154,13 +127,10 @@ if ($debuggingstartmachines) {
 print "Collecting IPs\n";
 
 my $instance;
-foreach $instance (keys %instances) {
+foreach $instance (keys %{$instances}) {
         my $id = $instance;
-        my $name = $instances{$id}{"name"};
-        my $publicip = $instances{$id}{"publicip"};
-        my $privateip = $instances{$id}{"privateip"};
 
-	print "id $id name $name\n";
+	print "id $id name ".$instances->{"$id"}{"name"}."\n";
 
 	#collect public IP
 	my $x = `$ec2_home/bin/ec2-describe-instances $id`;
@@ -169,41 +139,34 @@ foreach $instance (keys %instances) {
 	print "\n";
 	print "public ip is $1\n";
 	#assign the ip to the array
-	$instances{"$id"}{"publicip"}=$1;
-
-	#"x" =~ /(x)/;
+	$instances->{"$id"}{"publicip"}=$1;
 
        #collect private IP
         $x =~ /\s(10\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
         print "private ip is $1\n";
 	print "\n";
         #assign the ip to the array
-        $instances{"$id"}{"privateip"}=$1;
+        $instances->{"$id"}{"privateip"}=$1;
 
 	}
-
-#Fix local hosts file, here on 'puppetmaster'.
 
 open FILE, ">augeas.txt" or die $!;
 
 my $x;
 my $y=1;
-foreach $instance (keys %instances) {
+foreach $instance (keys %{$instances}) {
         my $id = $instance;
-        my $name = $instances{$id}{"name"};
-        my $publicip = $instances{$id}{"publicip"};
-        my $privateip = $instances{$id}{"privateip"};
-        my $alias = $instances{$id}{"alias"};
-        my $login = $instances{$id}{"login"};
 
-if ($name && $name ne "localhost") {
-                $x = "rm /files/etc/hosts/*[canonical = '$name']";
+if ($instances->{$id}{"name"} && $instances->{$id}{"name"} ne "localhost") {
+                $x = "rm /files/etc/hosts/*[canonical = '".$instances->{$id}{"name"}."']";
                 #print "x is $x\n";
                 print FILE "$x\n";
-                print FILE "set /files/etc/hosts/0$y/ipaddr $publicip\n";
-                print FILE "set /files/etc/hosts/0$y/canonical $name\n";
-                print FILE "set /files/etc/hosts/0$y/alias $name.ec2.internal\n";
-                print FILE "set /files/etc/hosts/0$y/alias[2] $alias\n";
+                print FILE "set /files/etc/hosts/0$y/ipaddr ".$instances->{$id}{"publicip"}."\n";
+                print FILE "set /files/etc/hosts/0$y/canonical ".$instances->{$id}{"name"}."\n";
+                print FILE "set /files/etc/hosts/0$y/alias ".$instances->{$id}{"name"}.".ec2.internal\n";
+		if ($instances->{$id}{"alias"}) {
+                print FILE "set /files/etc/hosts/0$y/alias[2] ".$instances->{$id}{"alias"}."\n";
+		}
                 $y++;
                 }
         }
@@ -220,14 +183,12 @@ open FILE, ">hosts" or die $!;
 
 print FILE "127.0.0.1   localhost localhost.localdomain\n";
 
-foreach $instance (keys %instances) {
+foreach $instance (keys %{$instances}) {
         my $id = $instance;
-        my $name = $instances{$id}{"name"};
-        my $publicip = $instances{$id}{"publicip"};
-        my $privateip = $instances{$id}{"privateip"};
-        my $alias = $instances{$id}{"alias"};
-        my $login = $instances{$id}{"login"};
-	print FILE "$privateip $name $name.ec2.internal $alias\n";
+        my $name = $instances->{$id}{"name"};
+        my $privateip = $instances->{$id}{"privateip"};
+        my $alias = $instances->{$id}{"alias"};
+	print FILE "$privateip $name $alias\n";
 	}
 
 close FILE;
@@ -238,18 +199,39 @@ sleep $sleep;
 
 if ($copyhostsfile) {
 print "Copying hosts file to instances\n";
-foreach $instance (keys %instances) {
+foreach $instance (keys %{$instances}) {
         my $id = $instance;
-        my $name = $instances{$id}{"name"};
-        my $publicip = $instances{$id}{"publicip"};
-        my $privateip = $instances{$id}{"privateip"};
-        my $alias = $instances{$id}{"alias"};
-        my $login = $instances{$id}{"login"};
+        my $name = $instances->{$id}{"name"};
+        my $login = $instances->{$id}{"login"};
 	my $connecthost = $login.'@'.$name ;
 	print "connecthost is $connecthost\n";
 	`scp -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no hosts $connecthost:/etc/`;
 	}
 }
+
+#fix hostnames
+foreach $instance (keys %{$instances}) {
+        my $id = $instance;
+        my $name = $instances->{$id}{"name"};
+        my $login = $instances->{$id}{"login"};
+        my $connecthost = $login.'@'.$name ;
+        my $osfamily = $instances->{$id}{"osfamily"};
+	my $hostname = $name;
+
+	if ($osfamily eq "redhat") {
+		my $subst = " \'s/^HOSTNAME=.*\$/HOSTNAME=$hostname/\' ";
+		`ssh  -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no $connecthost \'sed -i $subst /etc/sysconfig/network ; hostname $hostname\' ` ;
+		my $subst = " \'s/^SELINUX=.*\$/SELINUX=disabled/\' ";
+		`ssh  -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no $connecthost \'sed -i $subst /etc/selinux/config ; setenforce 0 \' ` ;
+		`ssh  -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no $connecthost \'chkconfig iptables off ; service iptables stop \' ` ;
+		}
+       if ($osfamily eq "debian") {
+                my $subst = " \'s/^HOSTNAME=.*\$/HOSTNAME=$hostname/\' ";
+                `ssh  -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no $connecthost \'echo $hostname > /etc/hostname ; sudo hostname $hostname\' ` ;
+                }
+
+        }
+
 
 } #end of "else" for starting instances
 
