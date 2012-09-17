@@ -240,6 +240,22 @@ foreach $instance (keys %{$instances}) {
 
         }
 
+#restart
+foreach $instance (keys %{$instances}) {
+        my $id = $instance;
+        my $name = $instances->{$id}{"name"};
+        my $login = $instances->{$id}{"login"};
+        my $connecthost = $login.'@'.$name ;
+        my $osfamily = $instances->{$id}{"osfamily"};
+        my $hostname = $name;
+	my $options = $instances->{$id}{"options"};
+
+        if ($options =~ /reboot/) {
+		print "restarting $name \n";
+                `ssh -t -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no $connecthost 'sudo reboot' ` ;
+		}
+
+	} # end of foreach
 
 } #end of "else" for starting instances
 
