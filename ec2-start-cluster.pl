@@ -213,7 +213,8 @@ foreach $instance (keys %{$instances}) {
         my $login = $instances->{$id}{"login"};
 	my $connecthost = $login.'@'.$name ;
 	print "connecthost is $connecthost\n";
-	`scp -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no hosts $connecthost:/etc/`;
+	`scp -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no hosts $connecthost:/tmp/`;
+	`ssh -t -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no $connecthost "sudo cp /tmp/hosts /etc/"`
 	}
 }
 
@@ -235,7 +236,7 @@ foreach $instance (keys %{$instances}) {
 		}
        if ($osfamily eq "debian") {
                 my $subst = " \'s/^HOSTNAME=.*\$/HOSTNAME=$hostname/\' ";
-                `ssh  -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no $connecthost \'echo $hostname > /etc/hostname ; sudo hostname $hostname\' ` ;
+                `ssh -t  -i /root/.ssh/testmachinekey.pem -o StrictHostKeyChecking=no $connecthost \'echo $hostname > /etc/hostname ; sudo hostname $hostname\' ` ;
                 }
 
         }
